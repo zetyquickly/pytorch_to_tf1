@@ -11,16 +11,16 @@ class DensePosePredictor(Module):
         dim_out_patches = 25
         kernel_size = 4
         self.ann_index_lowres = ConvTranspose2d(
-            dim_in, dim_out_ann_index, kernel_size, stride=2, padding=int(kernel_size / 2 - 1), data_format=data_format,
+            dim_in, dim_out_ann_index, kernel_size, [100, dim_out_ann_index, 64, 64], stride=2, padding=int(kernel_size / 2 - 1), data_format=data_format,
         )
         self.index_uv_lowres = ConvTranspose2d(
-            dim_in, dim_out_patches, kernel_size, stride=2, padding=int(kernel_size / 2 - 1), data_format=data_format,
+            dim_in, dim_out_patches, kernel_size, [100, dim_out_patches, 64, 64],  stride=2, padding=int(kernel_size / 2 - 1), data_format=data_format,
         )
         self.u_lowres = ConvTranspose2d(
-            dim_in, dim_out_patches, kernel_size, stride=2, padding=int(kernel_size / 2 - 1), data_format=data_format,
+            dim_in, dim_out_patches, kernel_size, [100, dim_out_patches, 64, 64], stride=2, padding=int(kernel_size / 2 - 1), data_format=data_format,
         )
         self.v_lowres = ConvTranspose2d(
-            dim_in, dim_out_patches, kernel_size, stride=2, padding=int(kernel_size / 2 - 1), data_format=data_format,
+            dim_in, dim_out_patches, kernel_size, [100, dim_out_patches, 64, 64], stride=2, padding=int(kernel_size / 2 - 1), data_format=data_format,
         )
 
     def forward(self, head_outputs):

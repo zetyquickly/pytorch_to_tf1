@@ -1,33 +1,52 @@
 from .aliases import Module, Sequential, Conv2d, ReLU
 import tensorflow as tf
 from tensorpack.models import FixedUnPooling, GlobalAvgPooling
+from .bifpn import MyFixedUnPooling
 import numpy as np
 import torch
 
 
 class Interpolate(Module):
-    def __init__(self, scale_factor, name='interp'):
+    def __init__(self, scale_factor, input_size, name='interp', data_format='NCHW'):
         super(Interpolate, self).__init__()
         self.scale_factor = scale_factor
+        if data_format == 'NHWC':
+            self.data_format = 'channels_last'
+        else:
+            self.data_format = 'channels_first'
+        self.input_size = input_size
         self.name = name
 
     def forward(self, x):
-        return FixedUnPooling(
-            self.name, x, self.scale_factor, unpool_mat=np.ones((self.scale_factor, self.scale_factor), dtype='float32'),
-            data_format='channels_first'
-        )
+        if self.data_format == 'channels_first':
+            x = tf.transpose(x, [0,2,3,1])
+            shv = [self.input_size[0], self.input_size[2], self.input_size[3], self.input_size[1]]
+            new_shape = tf.convert_to_tensor([shv[1]*self.scale_factor, shv[2]*self.scale_factor])
+            x = tf.image.resize_nearest_neighbor(x, new_shape)
+            x = tf.transpose(x, [0,3,1,2])
+            return x
+            # return FixedUnPooling(
+            #     self.name, x, self.scale_factor, unpool_mat=np.ones((self.scale_factor, self.scale_factor), dtype='float32'),
+            #     data_format='channels_first'
+            # )
+        else:
+            shv = self.input_size
+            new_shape = tf.convert_to_tensor([shv[1]*self.scale_factor, shv[2]*self.scale_factor])
+            x = tf.image.resize_nearest_neighbor(x, new_shape)
+            return x
 
 class AdaptiveAvgPool2d(Module):
-    def __init__(self, output_size, data_format='NHWC'):
+    def __init__(self, output_size, input_size, data_format='NHWC'):
         super(AdaptiveAvgPool2d, self).__init__()
         self.output_size = output_size
+        self.input_size = input_size
         if data_format == 'NHWC':
             self.data_format = 'channels_last'
         else:
             self.data_format = 'channels_first'
     def forward(self, x):
         x = GlobalAvgPooling('gap', x, data_format=self.data_format)
-        s = tf.shape(x)
+        s = self.input_size
         if self.data_format == 'channels_first':
             return tf.reshape(x, [s[0], s[1], 1, 1])
         else:
@@ -54,10 +73,10 @@ class ParsingSharedBlock(Module):
             ReLU(inplace=True)
         )
         self.aspp5 = Sequential(
-            AdaptiveAvgPool2d(output_size=(1, 1), data_format=data_format),
+            AdaptiveAvgPool2d(output_size=(1, 1), input_size=[100,64,32,32], data_format=data_format),
             Conv2d(64, 64, kernel_size=1, stride=1, data_format=data_format),
             ReLU(inplace=True),
-            Interpolate(scale_factor=32, name='aspp5_32x')
+            Interpolate(scale_factor=32, input_size=[100,64,1,1], name='aspp5_32x', data_format=data_format)
         )
         self.aspp_agg = Sequential(
             Conv2d(320, 64, kernel_size=1, stride=1, data_format=data_format),

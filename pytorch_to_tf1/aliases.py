@@ -56,7 +56,7 @@ class Module():
         self._load_from_state_dict(state_dict, '')
 
 class ConvTranspose2d(Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True, data_format='NHWC', name=None):
+    def __init__(self, in_channels, out_channels, kernel_size, output_shape, stride=1, padding=0, dilation=1, groups=1, bias=True, data_format='NHWC', name=None):
 
         if isinstance(padding, int):
             padding = dilation * (kernel_size - 1) - padding
@@ -90,6 +90,7 @@ class ConvTranspose2d(Module):
             self.padding = [self.padding[i] for i in order]
             self.dilation = [self.dilation[i] for i in order]
 
+        self.output_shape = output_shape
         self.property_setters = {'weight': self.set_torch_weight, 'bias': self.set_torch_bias}
 
     def set_torch_weight(self,weight):
@@ -114,32 +115,10 @@ class ConvTranspose2d(Module):
 
     def forward(self,x):
         
-        input_shape = tf.shape(x)
-
-        # if not self.is_same_pad():
-        #     x = tf.pad(x, self.padding)
-
         padding = 'SAME'# if self.is_same_pad() else 'VALID'
 
-        # input: [B, I, H, W]
-        # kernel: [kH, kW, O, I]
-        # output: [B, O, H, W]
-        # dunno how to propogate out_shape (HARD_CODE)
-
-        # shape_res2d = [max(self.kernel_size[0] - self.stride[2], 0),
-        #                    max(self.kernel_size[1] - self.stride[3], 0)]
-
-        out_shape = tf.convert_to_tensor(
-            [
-                input_shape[0], 
-                self.out_channels, 
-                input_shape[2]*2,# + shape_res2d[0], 
-                input_shape[3]*2,# + shape_res2d[1]
-            ]
-        )
-
         result = tf.nn.conv2d_transpose(
-            x, filter=self.kernel, output_shape=out_shape,
+            x, filter=self.kernel, output_shape=self.output_shape,
             strides=self.stride, padding=padding,
             data_format=self.data_format
         )
@@ -402,11 +381,13 @@ class FastNormalizedFusion(Module):
             'eps': self.set_eps,
         }
 
+    def set_weight(self, weight):
+        self.weight = np.maximum(weight, 0)
+        self.weight_list = self.weight.tolist()
+
     def set_eps(self, eps):
         self.eps = eps
-
-    def set_weight(self, weight):
-        self.weight = weight
+        self.divisor = np.sum(self.weight) + self.eps
 
     def forward(self, *x):
         if len(x) != self.in_nodes:
@@ -414,11 +395,10 @@ class FastNormalizedFusion(Module):
                 "Expected to have {} input nodes, but have {}.".format(self.in_nodes, len(x))
             )
         
-        weight = tf.nn.relu(self.weight)
         weighted_xs = [
-            xi * wi for xi, wi in zip(x, tf.split(weight, num_or_size_splits=self.in_nodes))
+            xi * wi for xi, wi in zip(x, self.weight_list)
         ]
-        normalized_weighted_x = sum(weighted_xs) / (tf.reduce_sum(weight) + self.eps)
+        normalized_weighted_x = sum(weighted_xs) / self.divisor
         return normalized_weighted_x
 
 

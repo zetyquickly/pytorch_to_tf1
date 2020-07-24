@@ -229,7 +229,7 @@ def test(torch_x, pt_class, tf_class, state_dict, *args, **kwargs):
 # print(torch_x_pooled.shape)
 
 # ### ParsingSharedBlock
-# from parsing_shared_block import ParsingSharedBlock as TFMod
+# from pytorch_to_tf1.parsing_shared_block import ParsingSharedBlock as TFMod
 # from densepose.modeling.shared_block import ParsingSharedBlock as PTMod
 # from detectron2.config import get_cfg
 # from densepose.modeling.config import add_efficientnet_config, add_roi_shared_config
@@ -260,6 +260,7 @@ def test(torch_x, pt_class, tf_class, state_dict, *args, **kwargs):
 # pt_y = pt_mod(torch_x)
 # tf_y = tf_mod(tf_x)
 
+# sess = tf.InteractiveSession()
 # res = np.sum(
 #     (
 #         pt_y.cpu().detach().numpy() - 
@@ -268,32 +269,81 @@ def test(torch_x, pt_class, tf_class, state_dict, *args, **kwargs):
 # )
 # print(res)
 
-### ConvTranspose2d
+# ### ConvTranspose2d
 
-from pytorch_to_tf1.aliases import ConvTranspose2d as TFMod
-from torch.nn import ConvTranspose2d as PTMod
+# from pytorch_to_tf1.aliases import ConvTranspose2d as TFMod
+# from torch.nn import ConvTranspose2d as PTMod
 
-prefix = 'roi_heads.densepose_predictor.v_lowres.'
+# prefix = 'roi_heads.densepose_predictor.v_lowres.'
+# state_dict_keys = filter(lambda x: prefix in x, model_dict['model'].keys())
+# state_dict = { k[len(prefix): ] : model_dict['model'][k] for k in state_dict_keys}
+
+# torch_to_tf_input_permutation = [0,1,2,3] # NCHW -> NCHW
+# # torch_to_tf_input_permutation = [0,2,3,1] # NCHW -> NHWC
+# torch_x = torch.rand((1, 64, 50, 50))
+# tf_x = torch_x.cpu().numpy()
+# tf_x = tf_x.transpose(torch_to_tf_input_permutation)
+
+# pt_layer = PTMod(64, 25, kernel_size=4, stride=2, padding=1)
+# tf_layer = TFMod(64, 25, kernel_size=4, stride=2, padding=1, data_format='NCHW')
+# tf_layer.load_state_dict(state_dict)
+# pt_layer.load_state_dict(state_dict)
+
+# sess = tf.InteractiveSession()
+# res = np.sum(
+#     (
+#         pt_layer(torch_x).cpu().detach().numpy().transpose(torch_to_tf_input_permutation) - 
+#         tf_layer(tf_x).eval()
+#     ) ** 2
+# )
+# print(tf_layer(tf_x).eval().shape)
+# print(res)
+
+### DensePoseHead 
+from pytorch_to_tf1.densepose_ending import DensePoseEnding as TFMod
+
+tf_layer = TFMod(64, data_format='NCHW')
+
+prefix = 'roi_heads.shared_block.'
 state_dict_keys = filter(lambda x: prefix in x, model_dict['model'].keys())
 state_dict = { k[len(prefix): ] : model_dict['model'][k] for k in state_dict_keys}
+tf_layer.shared_block.load_state_dict(state_dict)
+prefix = 'roi_heads.densepose_predictor.'
+state_dict_keys = filter(lambda x: prefix in x, model_dict['model'].keys())
+state_dict = { k[len(prefix): ] : model_dict['model'][k] for k in state_dict_keys}
+tf_layer.densepose_predictor.load_state_dict(state_dict)
 
-torch_to_tf_input_permutation = [0,1,2,3] # NCHW -> NCHW
-# torch_to_tf_input_permutation = [0,2,3,1] # NCHW -> NHWC
-torch_x = torch.rand((1, 64, 50, 50))
-tf_x = torch_x.cpu().numpy()
-tf_x = tf_x.transpose(torch_to_tf_input_permutation)
+torch_x = torch.rand((100, 64, 32, 32))
+tf_x = tf.convert_to_tensor(torch_x.cpu().numpy())
+tf_y = tf_layer(tf_x)
 
-pt_layer = PTMod(64, 25, kernel_size=4, stride=2, padding=1)
-tf_layer = TFMod(64, 25, kernel_size=4, stride=2, padding=1, data_format='NCHW')
-tf_layer.load_state_dict(state_dict)
-pt_layer.load_state_dict(state_dict)
+from detectron2.modeling import build_model
+from detectron2.config import get_cfg
+from densepose.modeling.config import add_efficientnet_config, add_roi_shared_config
+from densepose import add_densepose_config
+
+config_file = '/root/DensePose_ADASE/configs/s0_bv2_bifpn_f64_s3x.yaml'
+
+cfg = get_cfg()
+add_densepose_config(cfg)
+add_efficientnet_config(cfg)
+add_roi_shared_config(cfg)
+cfg.merge_from_file(config_file)
+cfg.freeze()
+
+
+pt_model = build_model(cfg)
+pt_model.load_state_dict(model_dict['model'])
+pt_model.eval()
+torch_y = pt_model.roi_heads.shared_block(torch_x)
+torch_y = pt_model.roi_heads.densepose_predictor(torch_y)
 
 sess = tf.InteractiveSession()
-res = np.sum(
-    (
-        pt_layer(torch_x).cpu().detach().numpy().transpose(torch_to_tf_input_permutation) - 
-        tf_layer(tf_x).eval()
-    ) ** 2
-)
-print(tf_layer(tf_x).eval().shape)
-print(res)
+for torch_out, tf_out in zip(torch_y[0], tf_y):
+    res = np.sum(
+        (
+            torch_out.detach().numpy() - 
+            tf_out.eval()
+        ) ** 2
+    )
+    print('####', res)

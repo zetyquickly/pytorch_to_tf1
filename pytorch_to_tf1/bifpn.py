@@ -6,6 +6,18 @@ import torch
 from .aliases import Module, Conv3x3BnReLU, FastNormalizedFusion, Conv2d, EfficientNetFeatures
 from tensorpack.models import FixedUnPooling, MaxPooling
 
+def MyFixedUnPooling(name, x, shape, unpool_mat, data_format):
+    if data_format == 'channels_first':
+        x = tf.transpose(x, [0,2,3,1])
+        shv = tf.shape(x)
+        new_shape = tf.convert_to_tensor([shv[1]*2, shv[2]*2])
+        x = tf.image.resize_nearest_neighbor(x, new_shape)
+        # x = FixedUnPooling(name, x, shape, None, data_format='channels_last')
+        x = tf.transpose(x, [0,3,1,2])
+    else:
+        x = FixedUnPooling(name, x, shape, unpool_mat, data_format)
+    return x  
+
 class BiFPN(Module):
     """
     This module implements Feature Pyramid Network.
@@ -69,17 +81,17 @@ class BiFPN(Module):
         else:
             data_format = 'channels_first'
 
-        p5_up = FixedUnPooling(
+        p5_up = MyFixedUnPooling(
             'p5_up', p5, 2, unpool_mat=np.ones((2, 2), dtype='float32'),
             data_format=data_format
         )
         p4_tr = self.p4_tr(self.fuse_p4_tr(p4, p5_up))
-        p4_tr_up = FixedUnPooling(
+        p4_tr_up = MyFixedUnPooling(
             'p4_tr_up', p4_tr, 2, unpool_mat=np.ones((2, 2), dtype='float32'),
             data_format=data_format
         )
         p3_tr = self.p3_tr(self.fuse_p3_tr(p3, p4_tr_up))
-        p3_tr_up = FixedUnPooling(
+        p3_tr_up = MyFixedUnPooling(
             'p3_tr_up', p3_tr, 2, unpool_mat=np.ones((2, 2), dtype='float32'),
             data_format=data_format
         )
