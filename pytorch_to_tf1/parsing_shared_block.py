@@ -1,7 +1,6 @@
 from .aliases import Module, Sequential, Conv2d, ReLU
 import tensorflow as tf
 from tensorpack.models import FixedUnPooling, GlobalAvgPooling
-from .bifpn import MyFixedUnPooling
 import numpy as np
 import torch
 
@@ -25,10 +24,10 @@ class Interpolate(Module):
             x = tf.image.resize_nearest_neighbor(x, new_shape)
             x = tf.transpose(x, [0,3,1,2])
             return x
-            # return FixedUnPooling(
-            #     self.name, x, self.scale_factor, unpool_mat=np.ones((self.scale_factor, self.scale_factor), dtype='float32'),
-            #     data_format='channels_first'
-            # )
+        # return FixedUnPooling(
+        #     self.name, x, self.scale_factor, unpool_mat=np.ones((self.scale_factor, self.scale_factor), dtype='float32'),
+        #     data_format='channels_first'
+        # )
         else:
             shv = self.input_size
             new_shape = tf.convert_to_tensor([shv[1]*self.scale_factor, shv[2]*self.scale_factor])
@@ -47,6 +46,7 @@ class AdaptiveAvgPool2d(Module):
     def forward(self, x):
         x = GlobalAvgPooling('gap', x, data_format=self.data_format)
         s = self.input_size
+        # s = tf.shape(x)
         if self.data_format == 'channels_first':
             return tf.reshape(x, [s[0], s[1], 1, 1])
         else:

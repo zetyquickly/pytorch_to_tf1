@@ -102,6 +102,35 @@ class BiFPN(Module):
         p6 = MaxPooling('maxpool_p5_out', p5_out, pool_size=1, strides=2, data_format=data_format, padding='VALID')
         return (p2_out, p3_out, p4_out, p5_out, p6)
 
+
+from tensorpack import ModelDesc
+
+class BiFPNTensorpack(ModelDesc):
+    def __init__(self, in_channels=64, data_format='NHWC'):
+        super(BiFPNTensorpack, self).__init__()
+        self.backbone = get_bifpn()
+
+    def get_inference_tensor_names(self):
+        out = []
+        out.append('output/p2')
+        out.append('output/p3')
+        out.append('output/p4')
+        out.append('output/p5')
+        out.append('output/p6')
+        return ['image'], out
+
+    def build_graph(self, *inputs):
+        inputs = dict(zip(self.input_names, inputs))
+        x = inputs['image']
+        p23456 = self.backbone(x)
+        for idx, feat in enumerate(p23456):
+            tf.identity(feat, 'output/p{}'.format(idx+2))
+
+    def inputs(self):
+        ret = [tf.TensorSpec((1, 3, 512, 512), tf.float32, 'image')]
+        return ret
+
+
 def get_bifpn():
     model_dict = torch.load(
         '/root/s0_bv2_bifpn_f64_s3x.pth',
@@ -114,24 +143,3 @@ def get_bifpn():
     m2 = BiFPN(m, 64, data_format='NCHW')
     m2.load_state_dict(state_dict)
     return m2
-
-
-if __name__ == "__main__":
-    model_dict = torch.load(
-        '/root/s0_bv2_bifpn_f64_s3x.pth',
-        map_location=torch.device('cpu'),    
-    )
-    prefix = 'backbone.'
-    state_dict_keys = filter(lambda x: prefix in x, model_dict['model'].keys())
-    state_dict = {k[len(prefix):]: model_dict['model'][k] for k in state_dict_keys}
-    print(state_dict.keys())
-
-    torch_to_tf_input_permutation = [0,2,3,1]
-    torch_x = torch.rand((1, 3, 224, 224))
-    tf_x = torch_x.cpu().numpy()
-    tf_x = tf_x.transpose(torch_to_tf_input_permutation)
-    m = EfficientNetFeatures()
-    m2 = BiFPN(m, 64)
-    m2.load_state_dict(state_dict)
-
-    print(m2(tf_x))

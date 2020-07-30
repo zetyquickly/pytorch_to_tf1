@@ -9,7 +9,7 @@ from tensorflow.python.framework import tensor_util
 
 # If load from pb, you may have to use get_tensor_by_name heavily.
 
-IMAGE_SHAPE = [100, 64, 32, 32]
+IMAGE_SHAPE = [1, 3, 512, 512]
 
 class Model(object):
     def __init__(self, model_filepath):
@@ -42,9 +42,9 @@ class Model(object):
             # Define input tensor
             self.input = tf.placeholder(np.float32,
                                         shape=IMAGE_SHAPE,
-                                        name='features_dp')
+                                        name='image')
             tf.import_graph_def(graph_def, {
-                'features_dp:0': self.input,
+                'image:0': self.input,
             })
 
         self.graph.finalize()
@@ -74,11 +74,11 @@ class Model(object):
         for op in self.graph.get_operations():
             print(op.name)
         output_tensor = [
-            # self.graph.get_tensor_by_name("import/output/boxes:0"),
+            self.graph.get_tensor_by_name("import/output/boxes:0"),
             self.graph.get_tensor_by_name("import/output/densepose_S:0"),
-            self.graph.get_tensor_by_name("import/output/densepose_I:0"),
-            self.graph.get_tensor_by_name("import/output/densepose_U:0"),
-            self.graph.get_tensor_by_name("import/output/densepose_V:0")
+            # self.graph.get_tensor_by_name("import/output/densepose_I:0"),
+            # self.graph.get_tensor_by_name("import/output/densepose_U:0"),
+            # self.graph.get_tensor_by_name("import/output/densepose_V:0")
             # self.graph.get_tensor_by_name("import/output/p2:0"),
             # self.graph.get_tensor_by_name("import/output/p3:0"),
             # self.graph.get_tensor_by_name("import/output/p4:0"),
@@ -108,8 +108,8 @@ def test_from_frozen_graph(model_filepath, image):
 
 def main():
 
-    # model_pb_filepath_default = '/root/tensorpack/examples/FasterRCNN/outV2.pb'
-    model_pb_filepath_default = '/root/pytorch_to_tf1/out.pb'
+    model_pb_filepath_default = '/root/tensorpack/examples/FasterRCNN/out.pb'
+    # model_pb_filepath_default = '/root/pytorch_to_tf1/out.pb'
     input_file = './1.jpg'
     img = cv2.imread(input_file, cv2.IMREAD_COLOR)
 
